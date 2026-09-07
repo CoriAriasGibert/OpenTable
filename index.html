@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+    <title>Restaurant Locator - by Algolia</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="./assets/favicon.ico" type="image/png" />
+    <link rel="stylesheet" href="index.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+  </head>
+
+  <body>
+    <!-- INTERFACE -->
+
+    
+    <div class="page">
+      <div class="page__container">
+        <!-- Header con búsqueda -->
+        <div class="page__header">
+          <div class="header__brand">
+            <span class="header__logo">🍽️</span>
+            <span class="header__title">Restaurant Locator</span>
+          </div>
+<!-- Barra de búsqueda -->
+<div class="search-bar">
+  <div class="search-bar__container">
+    <div class="search-bar__icon"></div>
+    <div id="search-input"></div>
+    <div class="search-bar__clear" id="search-clear">✕</div>
+  </div>
+</div>
+          </div>
+        </div>
+
+        <!-- Contenido principal -->
+        <div class="page__content">
+          <!-- Sidebar de filtros -->
+          <aside class="sidebar">
+            <div class="sidebar__header">
+              <h3>Filters</h3>
+              <button class="sidebar__toggle" id="filter-toggle">☰</button>
+            </div>
+            <div class="sidebar__content" id="filter-container">
+              <!-- Sección de tipo de cocina -->
+              <div class="filter__section">
+                <h3 class="filter__title">
+                  <span>Cuisine</span>
+                  <span class="filter__arrow">▾</span>
+                </h3>
+                <div id="cuisine-facets" class="filter__options"></div>
+              </div>
+              
+              <!-- Sección de precio -->
+              <div class="filter__section">
+                <h3 class="filter__title">
+                  <span>Price</span>
+                  <span class="filter__arrow">▾</span>
+                </h3>
+                <div id="price-facets" class="filter__options"></div>
+              </div>
+              
+              <!-- Sección de estilo de comedor -->
+              <div class="filter__section">
+                <h3 class="filter__title">
+                  <span>Dining Style</span>
+                  <span class="filter__arrow">▾</span>
+                </h3>
+                <div id="dining-style-facets" class="filter__options"></div>
+              </div>
+              
+              <!-- Botón para limpiar filtros -->
+              <button class="filter__clear" id="clear-filters">Clear all filters</button>
+            </div>
+          </aside>
+
+          <!-- Resultados -->
+          <main class="results">
+            <div class="results__stats-bar">
+              <span class="results__count-text" id="results-count"></span>
+              <span class="results__time-text" id="results-time"></span>
+              <div class="results__sort">
+                <select id="sort-select">
+                  <option value="relevance">Relevance</option>
+                  <option value="rating">Highest Rated</option>
+                  <option value="reviews">Most Reviewed</option>
+                  <option value="price_asc">Price: Low to High</option>
+                  <option value="price_desc">Price: High to Low</option>
+                </select>
+              </div>
+            </div>
+            
+            <div id="results-container" class="results__grid">
+              <!-- Los resultados se insertarán aquí -->
+            </div>
+
+            <div class="results__load-more" id="show-more">
+              <button class="load-more__btn" id="show-more-btn">
+                <span>Show more restaurants</span>
+                <span class="load-more__arrow">↓</span>
+              </button>
+            </div>
+          </main>
+        </div>
+      </div>
+    </div>
+    <!-- /INTERFACE -->
+
+    <!-- SCRIPTS -->
+    <script src="https://cdn.jsdelivr.net/npm/algoliasearch@4/dist/algoliasearch-lite.umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/instantsearch.js@4/dist/instantsearch.production.min.js"></script>
+    
+    <!-- Tu script personalizado -->
+    <script src="./index.js"></script>
+    <!-- /SCRIPTS -->
+  </body>
+</html>
