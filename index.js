@@ -6,7 +6,7 @@ const search = instantsearch({
   indexName: 'restaurants',
   searchClient,
   searchParameters: {
-    hitsPerPage: 10,
+    hitsPerPage: 6,
     queryType: 'prefixLast',
     typoTolerance: true,
     removeWordsIfNoResults: 'allOptional',
@@ -33,7 +33,8 @@ window.__debug = {
   currentRestaurants,
   lastSearchHits,
   updateMapMarkers,
-  search
+  search,
+  searchClient
 };
 
 function initMap() {
@@ -86,9 +87,6 @@ function updateMapMarkers(restaurants) {
   currentRestaurants = restaurants || [];
   lastSearchHits = restaurants || [];
   
-  console.log('📋 First restaurant in update:', restaurants[0]?.name);
-  console.log('📋 First restaurant geoloc:', restaurants[0]?._geoloc);
-  
   // Limpiar todos los marcadores
   console.log('🗑️ Clearing all markers from cluster');
   markerCluster.clearLayers();
@@ -137,8 +135,7 @@ function updateMapMarkers(restaurants) {
   markers = newMarkers;
 
   console.log(`📍 ${valid.length} markers added to map ✅`);
-  console.log(`📍 ${Object.keys(markersById).length} keys indexed`);
-  console.log('📋 Keys:', Object.keys(markersById).slice(0, 10), '...');
+  console.log('📋 Marcadores disponibles:', Object.keys(markersById).slice(0, 10));
 
   // Ajustar zoom
   if (valid.length > 0) {
@@ -205,25 +202,38 @@ function findMarker(lat, lng, objectID, name) {
   return null;
 }
 
+// ============ FUNCIÓN PRINCIPAL DE BÚSQUEDA ============
+
+function performSearch(query) {
+  console.log(`🔍 Realizando búsqueda: "${query}"`);
+  
+  const index = searchClient.initIndex('restaurants');
+  
+  index.search(query, {
+    hitsPerPage: 6,
+    attributesToRetrieve: ['*']
+  }).then(response => {
+    console.log('✅ Búsqueda completada!');
+    console.log(`📊 Encontrados ${response.hits.length} restaurantes`);
+    
+    if (response.hits && response.hits.length > 0) {
+      console.log('📋 Primer resultado:', response.hits[0].name);
+      console.log('📋 Geoloc:', response.hits[0]._geoloc);
+      updateMapMarkers(response.hits);
+    } else {
+      console.log('📭 No se encontraron resultados');
+      updateMapMarkers([]);
+    }
+  }).catch(err => {
+    console.error('❌ Error en búsqueda:', err);
+  });
+}
+
 // ============ FETCH INICIAL ============
 
 function fetchInitialRestaurants() {
   console.log('🔄 Fetching initial restaurants...');
-  
-  const index = searchClient.initIndex('restaurants');
-  
-  index.search('', {
-    hitsPerPage: 10,
-    attributesToRetrieve: ['*']
-  }).then(response => {
-    console.log('✅ Initial load complete!');
-    if (response.hits && response.hits.length > 0) {
-      updateMapMarkers(response.hits);
-      initialLoadDone = true;
-    }
-  }).catch(err => {
-    console.error('❌ API Error:', err);
-  });
+  performSearch('');
 }
 
 // ============ PAYMENT RENDERER ============
@@ -297,6 +307,13 @@ search.addWidgets([
     },
   }),
 
+  instantsearch.widgets.stats({
+    container: '#results-time',
+    templates: {
+      text: '⚡ {{processingTimeMS}}ms',
+    },
+  }),
+
   instantsearch.widgets.pagination({
     container: '#show-more',
     scrollTo: false,
@@ -351,54 +368,53 @@ search.addWidgets([
 // ============ START SEARCH ============
 search.start();
 
-// ============ LISTENER DE RESULTADOS - CON CAPTURA DIRECTA ============
+// FORZAR hitsPerPage en el helper después de iniciar
+setTimeout(() => {
+  if (search.helper) {
+    search.helper.setQueryParameter('hitsPerPage', 6);
+    console.log('🔧 Forzado hitsPerPage = 6 en el helper');
+  }
+}, 100);
 
-// Método 1: Evento 'result' de InstantSearch
+// ============ LISTENER DE RESULTADOS DE INSTANTSEARCH ============
+
 search.on('result', function(event) {
   console.log('📢 [Event] Search result event!');
-  const hits = event.results.hits || [];
+  let hits = event.results.hits || [];
   console.log(`📊 [Event] Found ${hits.length} restaurants`);
-  if (hits.length > 0) {
-    console.log('📋 [Event] First hit:', hits[0].name);
-    console.log('📋 [Event] First hit geoloc:', hits[0]._geoloc);
-  }
-  lastSearchHits = hits;
-  updateMapMarkers(hits);
+  
+  // No hacer nada aquí, dejamos que performSearch maneje la actualización
 });
 
-// Método 2: Escuchar cambios en el helper (más confiable)
-if (search.helper) {
-  console.log('🔧 Attaching helper listener...');
-  search.helper.on('result', function(event) {
-    console.log('📢 [Helper] Search result event!');
-    const hits = event.results.hits || [];
-    console.log(`📊 [Helper] Found ${hits.length} restaurants`);
-    if (hits.length > 0) {
-      console.log('📋 [Helper] First hit:', hits[0].name);
-      console.log('📋 [Helper] First hit geoloc:', hits[0]._geoloc);
-    }
-    lastSearchHits = hits;
-    updateMapMarkers(hits);
-  });
-}
+// ============ INTERCEPTAR BÚSQUEDA DEL INPUT ============
 
-// Método 3: Interceptar la búsqueda en el helper directamente
-const originalSearch = search.helper?.search;
-if (search.helper && originalSearch) {
-  search.helper.search = function(...args) {
-    console.log('🔍 [Intercept] Search called!');
-    const result = originalSearch.apply(this, args);
-    // Forzar una actualización después de la búsqueda
-    setTimeout(() => {
-      if (this.lastResults && this.lastResults.hits) {
-        const hits = this.lastResults.hits;
-        console.log(`📊 [Intercept] Found ${hits.length} restaurants`);
-        lastSearchHits = hits;
-        updateMapMarkers(hits);
-      }
-    }, 200);
-    return result;
-  };
+const searchInput = document.querySelector('.ais-SearchBox-input');
+if (searchInput) {
+  let lastQuery = '';
+  
+  searchInput.addEventListener('input', function() {
+    const query = this.value || '';
+    
+    // Solo buscar si cambió el texto
+    if (query !== lastQuery) {
+      lastQuery = query;
+      clearTimeout(window._searchTimeout);
+      window._searchTimeout = setTimeout(() => {
+        console.log(`🔍 Input detectado: "${query}"`);
+        performSearch(query);
+      }, 300);
+    }
+  });
+  
+  // También detectar cuando se presiona Enter
+  searchInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const query = this.value || '';
+      console.log(`🔍 Enter presionado: "${query}"`);
+      performSearch(query);
+    }
+  });
 }
 
 // ============ INICIALIZAR ============
@@ -414,13 +430,14 @@ document.getElementById('filters-toggle')?.addEventListener('click', function() 
   document.getElementById('filters-panel').classList.toggle('open');
 });
 
-document.getElementById('filters-close')?.addEventListener('click', function() {
-  document.getElementById('filters-panel').classList.remove('open');
-});
-
 document.getElementById('clear-filters')?.addEventListener('click', function() {
   if (search && search.helper) {
     search.helper.clearRefinements().search();
+  }
+  // También limpiar el input
+  if (searchInput) {
+    searchInput.value = '';
+    performSearch('');
   }
 });
 
@@ -442,6 +459,11 @@ document.getElementById('sort-select')?.addEventListener('change', function() {
     case 'price_desc': search.helper.setQueryParameter('sort', ['price:desc']).search(); break;
     default: search.helper.setQueryParameter('sort', undefined).search();
   }
+  // Forzar actualización
+  setTimeout(() => {
+    const query = searchInput?.value || '';
+    performSearch(query);
+  }, 200);
 });
 
 // ============ CLICK EN TARJETA → ZOOM AL MARCADOR ============
@@ -470,9 +492,6 @@ document.addEventListener('click', function(e) {
     }
     
     const findAndFly = function() {
-      console.log('🔍 Current markers count:', markers.length);
-      console.log('🔍 markersById keys:', Object.keys(markersById).length);
-      
       const targetMarker = findMarker(latNum, lngNum, objectID, name);
       
       if (targetMarker) {
@@ -496,11 +515,6 @@ document.addEventListener('click', function(e) {
   }
 });
 
-// ============ DEBUG: AYUDA EN CONSOLA ============
-
 console.log('✅ Restaurant Locator initialized!');
-console.log('💡 Para depuración, ejecuta:');
-console.log('   - __debug.markersById  (ver marcadores indexados)');
-console.log('   - __debug.markers      (ver lista de marcadores)');
-console.log('   - __debug.lastSearchHits (ver últimos resultados)');
-console.log('   - __debug.updateMapMarkers(hits) (forzar actualización)');
+console.log('💡 6 resultados por página');
+console.log('💡 Busca "Bistro Milano" para probar');
