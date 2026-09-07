@@ -7,111 +7,109 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" href="./assets/favicon.ico" type="image/png" />
     <link rel="stylesheet" href="index.css" />
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Leaflet.markercluster CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
   </head>
 
   <body>
-    <!-- INTERFACE -->
-
-    
-    <div class="page">
-      <div class="page__container">
-        <!-- Search Header -->
-        <div class="page__header">
-          <div class="header__brand">
-            <span class="header__logo">🍽️</span>
-            <span class="header__title">Restaurant Locator</span>
+    <div class="app">
+      <!-- Header -->
+      <header class="app-header">
+        <div class="header-content">
+          <div class="brand">
+            <span class="brand-icon">🍽️</span>
+            <span class="brand-title">Restaurant Locator</span>
           </div>
-<!-- Search Bar -->
-<div class="search-bar">
-  <div class="search-bar__container">
-    <div class="search-bar__icon"></div>
-    <div id="search-input"></div>
-    <div class="search-bar__clear" id="search-clear">✕</div>
-  </div>
-</div>
+          <div class="search-wrapper">
+            <div id="search-input"></div>
           </div>
         </div>
+      </header>
 
-        <!-- Main Content -->
-        <div class="page__content">
-          <!-- Filter Sidebar -->
-          <aside class="sidebar">
-            <div class="sidebar__header">
-              <h3>Filters</h3>
-              <button class="sidebar__toggle" id="filter-toggle">☰</button>
+      <!-- Main Content -->
+      <main class="app-main">
+        <!-- Filters Sidebar -->
+        <aside class="filters-panel" id="filters-panel">
+          <div class="filters-header">
+            <h3>Filters</h3>
+            <button class="filters-close" id="filters-close">✕</button>
+          </div>
+          <div class="filters-body">
+            <div class="filter-group">
+              <h4>Cuisine</h4>
+              <div id="cuisine-facets"></div>
             </div>
-            <div class="sidebar__content" id="filter-container">
-              <!-- Cuisine type section-->
-              <div class="filter__section">
-                <h3 class="filter__title">
-                  <span>Cuisine</span>
-                  <span class="filter__arrow">▾</span>
-                </h3>
-                <div id="cuisine-facets" class="filter__options"></div>
-              </div>
-              
-              <!-- Price section -->
-              <div class="filter__section">
-                <h3 class="filter__title">
-                  <span>Price</span>
-                  <span class="filter__arrow">▾</span>
-                </h3>
-                <div id="price-facets" class="filter__options"></div>
-              </div>
-              
-              <!-- Dining Style section -->
-              <div class="filter__section">
-                <h3 class="filter__title">
-                  <span>Dining Style</span>
-                  <span class="filter__arrow">▾</span>
-                </h3>
-                <div id="dining-style-facets" class="filter__options"></div>
-              </div>
-              
-              <!-- Clear Filters button -->
-              <button class="filter__clear" id="clear-filters">Clear all filters</button>
+            <div class="filter-group">
+              <h4>Price</h4>
+              <div id="price-facets"></div>
             </div>
-          </aside>
+            <div class="filter-group">
+              <h4>Dining Style</h4>
+              <div id="dining-style-facets"></div>
+            </div>
+            <button class="btn-clear-filters" id="clear-filters">Clear all filters</button>
+          </div>
+        </aside>
 
-          <!-- Results -->
-          <main class="results">
-            <div class="results__stats-bar">
-              <span class="results__count-text" id="results-count"></span>
-              <span class="results__time-text" id="results-time"></span>
-              <div class="results__sort">
-                <select id="sort-select">
-                  <option value="relevance">Relevance</option>
-                  <option value="rating">Highest Rated</option>
-                  <option value="reviews">Most Reviewed</option>
-                  <option value="price_asc">Price: Low to High</option>
-                  <option value="price_desc">Price: High to Low</option>
-                </select>
-              </div>
+        <!-- Results -->
+        <section class="results-panel">
+          <!-- Stats Bar -->
+          <div class="stats-bar">
+            <div class="stats-left">
+              <span class="stats-count" id="results-count"></span>
+              <span class="stats-time" id="results-time"></span>
             </div>
-            
-            <div id="results-container" class="results__grid">
-              <!-- The results will be inserted here -->
-            </div>
-
-            <div class="results__load-more" id="show-more">
-              <button class="load-more__btn" id="show-more-btn">
-                <span>Show more restaurants</span>
-                <span class="load-more__arrow">↓</span>
+            <div class="stats-right">
+              <button class="btn-filters-toggle" id="filters-toggle" aria-label="Toggle filters">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                  <path d="M2.5 5H17.5M5 10H15M7.5 15H12.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
               </button>
+              <select id="sort-select" class="sort-select">
+                <option value="relevance">Relevance</option>
+                <option value="rating">Highest Rated</option>
+                <option value="reviews">Most Reviewed</option>
+                <option value="price_asc">Price: Low → High</option>
+                <option value="price_desc">Price: High → Low</option>
+              </select>
             </div>
-          </main>
-        </div>
-      </div>
+          </div>
+
+          <!-- Results Grid -->
+          <div class="results-grid" id="hits">
+            <!-- Results inserted here -->
+          </div>
+
+          <!-- Load More -->
+          <div class="load-more" id="show-more">
+            <button class="btn-load-more" id="show-more-btn">
+              Show more restaurants
+              <span class="arrow-down">↓</span>
+            </button>
+          </div>
+
+          <!-- Map -->
+          <div class="map-section">
+            <div class="map-header">
+              <h3 class="map-title">📍 Restaurant Locations</h3>
+              <span class="map-hint">Scroll to zoom · Drag to explore</span>
+            </div>
+            <div id="map"></div>
+          </div>
+        </section>
+      </main>
     </div>
-    <!-- /INTERFACE -->
 
     <!-- SCRIPTS -->
     <script src="https://cdn.jsdelivr.net/npm/algoliasearch@4/dist/algoliasearch-lite.umd.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/instantsearch.js@4/dist/instantsearch.production.min.js"></script>
-    
-    <!-- My custom script -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     <script src="./index.js"></script>
-    <!-- /SCRIPTS -->
   </body>
 </html>
