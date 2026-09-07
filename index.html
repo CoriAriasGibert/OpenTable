@@ -16,13 +16,13 @@
     
     <div class="page">
       <div class="page__container">
-        <!-- Header con búsqueda -->
+        <!-- Search Header -->
         <div class="page__header">
           <div class="header__brand">
             <span class="header__logo">🍽️</span>
             <span class="header__title">Restaurant Locator</span>
           </div>
-<!-- Barra de búsqueda -->
+<!-- Search Bar -->
 <div class="search-bar">
   <div class="search-bar__container">
     <div class="search-bar__icon"></div>
@@ -33,16 +33,16 @@
           </div>
         </div>
 
-        <!-- Contenido principal -->
+        <!-- Main Content -->
         <div class="page__content">
-          <!-- Sidebar de filtros -->
+          <!-- Filter Sidebar -->
           <aside class="sidebar">
             <div class="sidebar__header">
               <h3>Filters</h3>
               <button class="sidebar__toggle" id="filter-toggle">☰</button>
             </div>
             <div class="sidebar__content" id="filter-container">
-              <!-- Sección de tipo de cocina -->
+              <!-- Cuisine type section-->
               <div class="filter__section">
                 <h3 class="filter__title">
                   <span>Cuisine</span>
@@ -51,7 +51,7 @@
                 <div id="cuisine-facets" class="filter__options"></div>
               </div>
               
-              <!-- Sección de precio -->
+              <!-- Price section -->
               <div class="filter__section">
                 <h3 class="filter__title">
                   <span>Price</span>
@@ -60,7 +60,7 @@
                 <div id="price-facets" class="filter__options"></div>
               </div>
               
-              <!-- Sección de estilo de comedor -->
+              <!-- Dining Style section -->
               <div class="filter__section">
                 <h3 class="filter__title">
                   <span>Dining Style</span>
@@ -69,12 +69,12 @@
                 <div id="dining-style-facets" class="filter__options"></div>
               </div>
               
-              <!-- Botón para limpiar filtros -->
+              <!-- Clear Filters button -->
               <button class="filter__clear" id="clear-filters">Clear all filters</button>
             </div>
           </aside>
 
-          <!-- Resultados -->
+          <!-- Results -->
           <main class="results">
             <div class="results__stats-bar">
               <span class="results__count-text" id="results-count"></span>
@@ -91,7 +91,7 @@
             </div>
             
             <div id="results-container" class="results__grid">
-              <!-- Los resultados se insertarán aquí -->
+              <!-- The results will be inserted here -->
             </div>
 
             <div class="results__load-more" id="show-more">
@@ -110,7 +110,7 @@
     <script src="https://cdn.jsdelivr.net/npm/algoliasearch@4/dist/algoliasearch-lite.umd.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/instantsearch.js@4/dist/instantsearch.production.min.js"></script>
     
-    <!-- Tu script personalizado -->
+    <!-- My custom script -->
     <script src="./index.js"></script>
     <!-- /SCRIPTS -->
   </body>

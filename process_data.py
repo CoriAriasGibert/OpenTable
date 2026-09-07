@@ -1,26 +1,68 @@
 import json
-from algoliasearch.search.client import SearchClientSync
+import pandas as pd
 
-# Configuración
-ALGOLIA_APP_ID = 'HBSG4O6ZTO'
-ALGOLIA_API_KEY = 'df39a95b744c6c278d41de3d8ec87ba7'  # Reemplaza esto
-ALGOLIA_INDEX_NAME = 'restaurants'
+print("Loading data...")
 
-# Cargar el JSON procesado
-with open('restaurants_processed.json', 'r', encoding='utf-8') as f:
-    records = json.load(f)
+# Load the JSON file
+with open('dataset/restaurants_list.json', 'r', encoding='utf-8') as f:
+    restaurants = json.load(f)
 
-# Inicializar cliente
-client = SearchClientSync(ALGOLIA_APP_ID, ALGOLIA_API_KEY)
+# Load the CSV file
+df_info = pd.read_csv('dataset/restaurants_info.csv', delimiter=';')
 
-# Subir en lotes
-batch_size = 1000
-for i in range(0, len(records), batch_size):
-    batch = records[i:i + batch_size]
-    client.save_objects(
-        index_name=ALGOLIA_INDEX_NAME,
-        objects=batch,
-    )
-    print(f"Lote {i//batch_size + 1} enviado ({len(batch)} registros)")
+print("Procesando y combinando datos...")
 
-print("¡Datos subidos correctamente!")
+# Normalize the 'objectID' in the JSON 
+for restaurant in restaurants:
+    restaurant['objectID'] = int(restaurant['objectID'])
+
+# Convert the 'objectID' column in the DataFrame to int
+df_info['objectID'] = df_info['objectID'].astype(int)
+
+# Create a dictionary from the CSV for quick lookup based on objectID
+info_dict = df_info.set_index('objectID').to_dict('index')
+
+# Prepare a list to hold the indexed records
+indexed_records = []
+
+for restaurant in restaurants:
+    obj_id = restaurant['objectID']
+    
+    # Obtein additional info from the CSV based on objectID
+    additional_info = info_dict.get(obj_id, {})
+    
+    # --- Modify fields ---
+    
+    # 1. Add 'cuisine_type' from the CSV if available, otherwise default to 'N/A'
+    restaurant['cuisine_type'] = additional_info.get('food_type', 'N/A')
+    
+    # 2. Convert 'price' to a more user-friendly value
+    price_mapping = {
+        1: "$",
+        2: "$$",
+        3: "$$$",
+        4: "$$$$"
+    }
+    restaurant['price_range_string'] = price_mapping.get(restaurant.get('price', 0), 'N/A')
+    
+    # 3. Modify the numeric fields from the CSV
+    restaurant['stars_count'] = float(additional_info.get('stars_count', 0))
+    restaurant['reviews_count'] = int(additional_info.get('reviews_count', 0))
+    
+    # Add the phone number if available
+    restaurant['phone'] = additional_info.get('phone_number', '')
+    
+    # Add the dining style if available
+    restaurant['dining_style'] = additional_info.get('dining_style', '')
+    
+    indexed_records.append(restaurant)
+
+print(f"Total de registros procesados: {len(indexed_records)}")
+
+# Save the processed JSON file
+output_file = 'restaurants_processed.json'
+with open(output_file, 'w', encoding='utf-8') as f:
+    json.dump(indexed_records, f, ensure_ascii=False, indent=2)
+
+print(f"Archivo '{output_file}' generado correctamente!")
+print(f"Puedes subirlo manualmente al dashboard de Algolia.")

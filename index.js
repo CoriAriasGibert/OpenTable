@@ -1,13 +1,13 @@
-// Configuración de Algolia
+// Algolia Search Configuration
 const searchClient = algoliasearch('HBSG4O6ZTO', '372e9e9a75aeee3a3d526ee77419c9d8');
 
-// Configuración de InstantSearch
+// InstantSearch config
 const search = instantsearch({
   indexName: 'restaurants',
   searchClient,
 });
 
-// Función para renderizar métodos de pago
+// Function to render payment methods
 function renderPayments(payment_options) {
   if (!payment_options || payment_options.length === 0) {
     return '';
@@ -32,7 +32,7 @@ function renderPayments(payment_options) {
   `).join('');
 }
 
-// Widget de búsqueda
+// Search Widget
 search.addWidgets([
   instantsearch.widgets.searchBox({
     container: '#search-input',
@@ -47,7 +47,7 @@ search.addWidgets([
     },
   }),
 
-  // Widget de resultados
+  // Results Widget
   instantsearch.widgets.hits({
     container: '#results-container',
     templates: {
@@ -94,7 +94,7 @@ search.addWidgets([
     },
   }),
 
-  // Widget para mostrar el número de resultados
+  // Number of results widget
   instantsearch.widgets.stats({
     container: '#results-count',
     templates: {
@@ -102,7 +102,7 @@ search.addWidgets([
     },
   }),
 
-  // Widget para el tiempo de búsqueda
+  // search processing time widget
   instantsearch.widgets.stats({
     container: '#results-time',
     templates: {
@@ -110,7 +110,7 @@ search.addWidgets([
     },
   }),
 
-  // Widget de paginación
+  // pagination Widget
   instantsearch.widgets.pagination({
     container: '#show-more',
     scrollTo: false,
@@ -120,7 +120,7 @@ search.addWidgets([
     },
   }),
 
-  // Widget de refinamiento por tipo de cocina
+  // cuisine type refinement widget
   instantsearch.widgets.refinementList({
     container: '#cuisine-facets',
     attribute: 'cuisine_type',
@@ -135,7 +135,7 @@ search.addWidgets([
     },
   }),
 
-  // Widget de refinamiento por precio
+  // Price range refinement widget
   instantsearch.widgets.refinementList({
     container: '#price-facets',
     attribute: 'price_range_string',
@@ -149,7 +149,7 @@ search.addWidgets([
     },
   }),
 
-  // Widget de refinamiento por estilo de comedor
+  //dyning style refinement widget
   instantsearch.widgets.refinementList({
     container: '#dining-style-facets',
     attribute: 'dining_style',
@@ -165,24 +165,24 @@ search.addWidgets([
   }),
 ]);
 
-// Iniciar InstantSearch
+// Inicialize InstantSearch
 search.start();
 
-// Manejar el clic en el botón "Show more"
+//Click managment "Show more"
 document.getElementById('show-more-btn').addEventListener('click', function() {
   search.helper.nextPage();
 });
 
-// Manejar el clic para abrir/cerrar filtros en móvil
+// Use the click event to toggle the filter sidebar
 document.getElementById('filter-toggle').addEventListener('click', function() {
   const container = document.getElementById('filter-container');
   container.classList.toggle('open');
 });
 
-// Manejar el botón de limpiar búsqueda
+// manage the clear search button
 document.getElementById('search-clear').addEventListener('click', function() {
   search.helper.setQuery('').search();
-  // Limpiar el input de búsqueda
+  // clear the input field
   const searchInput = document.querySelector('.search-bar__input');
   if (searchInput) {
     searchInput.value = '';
@@ -190,7 +190,7 @@ document.getElementById('search-clear').addEventListener('click', function() {
   document.getElementById('search-clear').style.display = 'none';
 });
 
-// Mostrar/ocultar botón de limpiar búsqueda
+//Show or hide the clear search button based on input value
 document.addEventListener('input', function(e) {
   if (e.target.classList.contains('search-bar__input')) {
     const clearBtn = document.getElementById('search-clear');
@@ -198,12 +198,12 @@ document.addEventListener('input', function(e) {
   }
 });
 
-// Manejar botón de limpiar filtros
+// Manage clear filters button
 document.getElementById('clear-filters').addEventListener('click', function() {
   search.helper.clearRefinements().search();
 });
 
-// Manejar selección de ordenamiento
+// Manage sort selection
 document.getElementById('sort-select').addEventListener('change', function() {
   const value = this.value;
   

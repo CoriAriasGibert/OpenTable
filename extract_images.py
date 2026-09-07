@@ -13,13 +13,13 @@ import os
 import signal
 import sys
 
-# CONFIGURACIÓN
+# configuration
 INPUT_JSON = 'dataset/restaurants_list.json'
 INPUT_CSV = 'dataset/restaurants_info.csv'
 OUTPUT_JSON = 'restaurants_with_real_images.json'
 CHECKPOINT_FILE = 'extract_progress.json'
 
-# Configurar Chrome
+#  Chrome configuration
 chrome_options = Options()
 chrome_options.add_argument('--headless')
 chrome_options.add_argument('--no-sandbox')
@@ -46,9 +46,9 @@ def extract_image(driver, url):
     """Extraer la imagen usando Selenium"""
     try:
         driver.get(url)
-        time.sleep(2 + random.random() * 2)  # Espera aleatoria 2-4 segundos
+        time.sleep(2 + random.random() * 2)  # aleatory wait to avoid detection
         
-        # MÉTODO 1: Buscar img con data-test
+        # method 1: look for the main restaurant image
         try:
             img = driver.find_element(By.CSS_SELECTOR, 'img[data-test="restaurant-profile-photo"]')
             src = img.get_attribute('src')
@@ -57,7 +57,7 @@ def extract_image(driver, url):
         except:
             pass
         
-        # MÉTODO 2: Buscar en srcset
+        # method 2: look in srcset
         try:
             imgs = driver.find_elements(By.TAG_NAME, 'img')
             for img in imgs:
@@ -69,7 +69,7 @@ def extract_image(driver, url):
         except:
             pass
         
-        # MÉTODO 3: Buscar cualquier img con otstatic
+        # method 3: look for any img with otstatic
         try:
             imgs = driver.find_elements(By.TAG_NAME, 'img')
             for img in imgs:
@@ -79,7 +79,7 @@ def extract_image(driver, url):
         except:
             pass
         
-        # MÉTODO 4: Buscar og:image
+        # method 4: look for og:image
         try:
             og_image = driver.find_element(By.CSS_SELECTOR, 'meta[property="og:image"]')
             content = og_image.get_attribute('content')
@@ -138,18 +138,18 @@ def main():
     print("=== EXTRACTOR DE IMÁGENES DE OPENTABLE ===")
     print("=" * 50)
     
-    # Cargar datos
+    # check if the output file already exists
     records = load_data()
     print(f"Total de restaurantes: {len(records)}")
     
-    # Cargar checkpoint
+    # load checkpoint
     checkpoint = load_checkpoint()
     start_index = checkpoint.get('last_index', 0)
     results = checkpoint.get('results', {})
     
     print(f"Reanudando desde índice: {start_index}")
     
-    # Inicializar driver
+    # Inicializz driver
     driver = init_driver()
     if not driver:
         print("No se pudo inicializar Chrome. Saliendo...")
@@ -163,12 +163,12 @@ def main():
             record = records[i]
             restaurant_id = record['objectID']
             
-            # Construir URL
+            # Build URL
             profile_url = f"https://www.opentable.com/restaurant/profile/{restaurant_id}/reserve?rid={restaurant_id}"
             
             print(f"\n[{i+1}/{len(records)}] Procesando: {record['name']} ({restaurant_id})")
             
-            # Extraer imagen
+            # Extract image
             real_image = extract_image(driver, profile_url)
             
             if real_image:
@@ -181,13 +181,13 @@ def main():
                 fail_count += 1
                 print(f"  ❌ Usando imagen original")
             
-            # Guardar checkpoint cada 5 restaurantes
+            # Save checkpoint every 5 restaurants
             if (i + 1) % 5 == 0:
                 checkpoint['last_index'] = i + 1
                 checkpoint['results'] = results
                 save_checkpoint(checkpoint)
                 
-                # Guardar JSON parcial
+                # Save partial JSON
                 with open(OUTPUT_JSON, 'w', encoding='utf-8') as f:
                     json.dump(records, f, ensure_ascii=False, indent=2)
                 
@@ -195,7 +195,7 @@ def main():
                 print(f"  ✅ Éxito: {success_count} | ❌ Fallidos: {fail_count}")
                 print(f"  💾 Checkpoint guardado")
             
-            # Pausa aleatoria para evitar bloqueos
+            # aleatory wait to avoid detection
             time.sleep(1 + random.random())
         
         print(f"\n=== RESULTADOS FINALES ===")
@@ -213,7 +213,7 @@ def main():
         print("\n\n⏹️ Proceso interrumpido por el usuario")
         print("Guardando progreso...")
         
-        # Guardar progreso
+        # save checkpoint
         checkpoint['last_index'] = i
         checkpoint['results'] = results
         save_checkpoint(checkpoint)
@@ -224,7 +224,7 @@ def main():
         print("✅ Progreso guardado. Puedes reanudar ejecutando el script nuevamente.")
         
     finally:
-        # Cerrar driver
+        # Close driver
         if driver:
             driver.quit()
             print("\n👋 Navegador cerrado")
