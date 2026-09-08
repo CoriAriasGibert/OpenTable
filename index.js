@@ -26,6 +26,169 @@ let currentRestaurants = [];
 let isUpdatingMarkers = false;
 let lastSearchHits = [];
 
+// ============ ESTADO DE BÚSQUEDA ============
+let isTextSearchActive = false; // Si el usuario está buscando por texto
+let lastTextQuery = '';
+
+// ============ BÚSQUEDA POR MAPA ============
+
+let mapSearchTimeout = null;
+let lastMapSearch = null;
+
+/**
+ * Buscar restaurantes en el área visible del mapa
+ * Solo se ejecuta si NO hay una búsqueda por texto activa
+ */
+function searchRestaurantsInMapView() {
+  // NO ejecutar si hay una búsqueda por texto activa
+  if (isTextSearchActive) {
+    console.log('⏳ Búsqueda por mapa desactivada (búsqueda por texto activa)');
+    return;
+  }
+
+  if (!map) {
+    console.warn('⚠️ Mapa no inicializado');
+    return;
+  }
+
+  const bounds = map.getBounds();
+  if (!bounds.isValid()) {
+    console.warn('⚠️ Límites del mapa no válidos');
+    return;
+  }
+
+  const center = bounds.getCenter();
+  const zoom = map.getZoom();
+  const radius = calculateRadiusFromZoom(zoom);
+  
+  console.log(`🔍 Buscando restaurantes en área visible: centro [${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}], radio: ${radius}m, zoom: ${zoom}`);
+
+  const searchKey = `${center.lat.toFixed(4)},${center.lng.toFixed(4)},${radius}`;
+  if (lastMapSearch === searchKey) {
+    console.log('⏳ Misma área, omitiendo búsqueda duplicada');
+    return;
+  }
+  lastMapSearch = searchKey;
+
+  const index = searchClient.initIndex('restaurants');
+  
+  index.search('', {
+    hitsPerPage: 20,
+    aroundLatLng: `${center.lat}, ${center.lng}`,
+    aroundRadius: radius,
+    attributesToRetrieve: ['*']
+  }).then(response => {
+    console.log(`✅ Búsqueda por mapa: ${response.hits.length} restaurantes encontrados`);
+    
+    if (response.hits && response.hits.length > 0) {
+      updateMapMarkers(response.hits, false); // false = no forzar zoom
+      updateHitsUI(response.hits);
+      
+      const countEl = document.getElementById('results-count');
+      if (countEl) {
+        countEl.textContent = `📊 ${response.nbHits || response.hits.length} restaurants`;
+      }
+    } else {
+      console.log('📭 No se encontraron restaurantes en esta área');
+      showMapMessage('No restaurants found in this area');
+    }
+  }).catch(err => {
+    console.error('❌ Error en búsqueda por mapa:', err);
+  });
+}
+
+/**
+ * Calcular radio de búsqueda basado en el nivel de zoom
+ */
+function calculateRadiusFromZoom(zoom) {
+  const baseRadius = 50000;
+  const radius = Math.max(2000, Math.min(50000, baseRadius / (zoom * 0.5 + 0.5)));
+  return Math.round(radius);
+}
+
+/**
+ * Actualizar la interfaz de resultados con los hits
+ */
+function updateHitsUI(hits) {
+  const container = document.getElementById('hits');
+  if (!container) return;
+
+  if (!hits || hits.length === 0) {
+    container.innerHTML = `
+      <div class="ais-Hits-empty">
+        <p>😕 No restaurants found in this area</p>
+        <p style="font-size:13px;color:rgba(26,26,46,0.4);">Try moving the map to explore more</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = hits.map(hit => `
+    <div class="result-card" 
+         data-id="${hit.objectID}"
+         data-lat="${hit._geoloc?.lat}" 
+         data-lng="${hit._geoloc?.lng}"
+         data-name="${hit.name}">
+      <div class="result-card__image">
+        <img src="${hit.image_url}" alt="${hit.name}" onerror="this.style.display='none'" />
+        <span class="result-card__badge">⭐ ${hit.stars_count || 'N/A'}</span>
+      </div>
+      <div class="result-card__body">
+        <h3 class="result-card__name">${hit.name || 'Restaurant'}</h3>
+        <div class="result-card__rating">
+          <span class="result-card__stars">⭐ ${hit.stars_count || 'N/A'}</span>
+          <span class="result-card__reviews">(${hit.reviews_count || 0} reviews)</span>
+        </div>
+        <div class="result-card__meta">
+          <span class="result-card__tag result-card__tag--cuisine">${hit.cuisine_type || ''}</span>
+          <span class="result-card__tag result-card__tag--price">${hit.price_range_string || ''}</span>
+        </div>
+        <p class="result-card__dining">${hit.dining_style || ''}</p>
+        <p class="result-card__address">${hit.address || ''}, ${hit.city || ''}, ${hit.state || ''}</p>
+        <a href="${hit.reserve_url || '#'}" target="_blank" class="result-card__reserve">📅 Reserve Now</a>
+      </div>
+    </div>
+  `).join('');
+}
+
+/**
+ * Mostrar mensaje en el mapa
+ */
+function showMapMessage(message) {
+  clearMapMessage();
+  
+  const info = L.control({ position: 'bottomleft' });
+  info.onAdd = function() {
+    this._div = L.DomUtil.create('div', 'map-message');
+    this._div.innerHTML = `
+      <div style="
+        background: rgba(255,255,255,0.85);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        padding: 10px 16px;
+        border-radius: 12px;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+        font-size: 13px;
+        color: #1a1a3e;
+        border-left: 3px solid #6C5CE7;
+        font-weight: 500;
+      ">
+        ${message}
+      </div>
+    `;
+    return this._div;
+  };
+  info.addTo(map);
+  window._mapMessage = info;
+}
+
+function clearMapMessage() {
+  if (window._mapMessage && map) {
+    map.removeControl(window._mapMessage);
+    window._mapMessage = null;
+  }
+}
+
 // Exponer variables para depuración
 window.__debug = {
   markersById,
@@ -34,7 +197,8 @@ window.__debug = {
   lastSearchHits,
   updateMapMarkers,
   search,
-  searchClient
+  searchClient,
+  searchRestaurantsInMapView
 };
 
 function initMap() {
@@ -56,6 +220,16 @@ function initMap() {
     maxZoom: 19,
   }).addTo(map);
 
+  // Evento de movimiento del mapa
+  map.on('moveend', function() {
+    console.log('🗺️ Mapa movido o zoom cambiado');
+    
+    clearTimeout(mapSearchTimeout);
+    mapSearchTimeout = setTimeout(function() {
+      searchRestaurantsInMapView();
+    }, 300);
+  });
+
   markerCluster = L.markerClusterGroup({
     maxClusterRadius: 50,
     iconCreateFunction: function(cluster) {
@@ -73,9 +247,14 @@ function initMap() {
   map.addLayer(markerCluster);
   mapInitialized = true;
   console.log('🗺️ Map initialized ✅');
+  
+  // Búsqueda inicial al cargar el mapa
+  setTimeout(function() {
+    searchRestaurantsInMapView();
+  }, 500);
 }
 
-function updateMapMarkers(restaurants) {
+function updateMapMarkers(restaurants, forceZoom = false) {
   console.log('🔄 updateMapMarkers called with', restaurants?.length || 0, 'restaurants');
   
   if (!map || !markerCluster) {
@@ -87,7 +266,6 @@ function updateMapMarkers(restaurants) {
   currentRestaurants = restaurants || [];
   lastSearchHits = restaurants || [];
   
-  // Limpiar todos los marcadores
   console.log('🗑️ Clearing all markers from cluster');
   markerCluster.clearLayers();
   markers = [];
@@ -102,7 +280,6 @@ function updateMapMarkers(restaurants) {
     return;
   }
 
-  // Añadir nuevos marcadores
   const newMarkers = [];
 
   valid.forEach((r) => {
@@ -122,7 +299,6 @@ function updateMapMarkers(restaurants) {
       </div>
     `);
     
-    // Indexar por múltiples claves
     if (r.objectID) markersById[r.objectID] = marker;
     if (r.name) markersById[r.name] = marker;
     const coordKey = `${r._geoloc.lat.toFixed(6)},${r._geoloc.lng.toFixed(6)}`;
@@ -137,15 +313,15 @@ function updateMapMarkers(restaurants) {
   console.log(`📍 ${valid.length} markers added to map ✅`);
   console.log('📋 Marcadores disponibles:', Object.keys(markersById).slice(0, 10));
 
-  // Ajustar zoom
-  if (valid.length > 0) {
+  // SOLO forzar zoom si se pide explícitamente
+  if (forceZoom && valid.length > 0) {
     try {
       const group = L.featureGroup();
       valid.forEach(r => group.addLayer(L.marker([r._geoloc.lat, r._geoloc.lng])));
       const bounds = group.getBounds();
       if (bounds.isValid()) {
         map.fitBounds(bounds, { padding: [50, 50], maxZoom: 12 });
-        console.log('🔍 Zoom adjusted to show new markers');
+        console.log('🔍 Zoom forzado para mostrar nuevos marcadores');
       }
     } catch (e) {
       console.warn('⚠️ Could not adjust zoom:', e);
@@ -160,19 +336,16 @@ function updateMapMarkers(restaurants) {
 function findMarker(lat, lng, objectID, name) {
   console.log(`🔍 Finding marker for: ${name || objectID} at ${lat}, ${lng}`);
   
-  // 1. Buscar por objectID
   if (objectID && markersById[objectID]) {
     console.log(`✅ Found by objectID: ${objectID}`);
     return markersById[objectID];
   }
   
-  // 2. Buscar por nombre exacto
   if (name && markersById[name]) {
     console.log(`✅ Found by name: ${name}`);
     return markersById[name];
   }
   
-  // 3. Buscar por coordenadas (con tolerancia)
   if (lat && lng) {
     const latNum = parseFloat(lat);
     const lngNum = parseFloat(lng);
@@ -183,7 +356,6 @@ function findMarker(lat, lng, objectID, name) {
     }
   }
   
-  // 4. Búsqueda lineal con tolerancia
   console.log('🔍 Searching linearly with tolerance...');
   const latNum = parseFloat(lat);
   const lngNum = parseFloat(lng);
@@ -207,22 +379,52 @@ function findMarker(lat, lng, objectID, name) {
 function performSearch(query) {
   console.log(`🔍 Realizando búsqueda: "${query}"`);
   
+  const trimmedQuery = query?.trim() || '';
+  lastTextQuery = trimmedQuery;
+  
+  // Si hay texto, activar modo búsqueda por texto
+  if (trimmedQuery !== '') {
+    isTextSearchActive = true;
+    console.log('🔍 Modo búsqueda por texto ACTIVADO');
+  } else {
+    isTextSearchActive = false;
+    console.log('🔍 Modo búsqueda por texto DESACTIVADO');
+    // Si el usuario borró el texto, volver a la búsqueda por mapa
+    setTimeout(function() {
+      searchRestaurantsInMapView();
+    }, 300);
+    return;
+  }
+  
   const index = searchClient.initIndex('restaurants');
   
-  index.search(query, {
+  const searchParams = {
     hitsPerPage: 6,
-    attributesToRetrieve: ['*']
-  }).then(response => {
+    attributesToRetrieve: ['*'],
+    query: trimmedQuery,
+    // Eliminar filtros de ubicación para buscar en todo el país
+    aroundLatLng: undefined,
+    aroundRadius: undefined
+  };
+  
+  index.search(trimmedQuery, searchParams).then(response => {
     console.log('✅ Búsqueda completada!');
     console.log(`📊 Encontrados ${response.hits.length} restaurantes`);
     
     if (response.hits && response.hits.length > 0) {
       console.log('📋 Primer resultado:', response.hits[0].name);
-      console.log('📋 Geoloc:', response.hits[0]._geoloc);
-      updateMapMarkers(response.hits);
+      // forceZoom = true para que zoom al resultado de la búsqueda
+      updateMapMarkers(response.hits, true);
+      updateHitsUI(response.hits);
+      
+      const countEl = document.getElementById('results-count');
+      if (countEl) {
+        countEl.textContent = `📊 ${response.nbHits || response.hits.length} restaurants`;
+      }
     } else {
       console.log('📭 No se encontraron resultados');
       updateMapMarkers([]);
+      updateHitsUI([]);
     }
   }).catch(err => {
     console.error('❌ Error en búsqueda:', err);
@@ -232,8 +434,15 @@ function performSearch(query) {
 // ============ FETCH INICIAL ============
 
 function fetchInitialRestaurants() {
-  console.log('🔄 Fetching initial restaurants...');
-  performSearch('');
+  console.log('🔄 Cargando restaurantes iniciales...');
+  
+  if (!map) {
+    console.log('⏳ Esperando mapa...');
+    setTimeout(fetchInitialRestaurants, 300);
+    return;
+  }
+  
+  searchRestaurantsInMapView();
 }
 
 // ============ PAYMENT RENDERER ============
@@ -285,8 +494,6 @@ search.addWidgets([
             </div>
             <p class="result-card__dining">${hit.dining_style || ''}</p>
             <p class="result-card__address">${hit.address || ''}, ${hit.city || ''}, ${hit.state || ''}</p>
-            <a href="tel:${hit.phone}" class="result-card__phone">📞 ${hit.phone || ''}</a>
-            <div class="result-card__payments">${renderPayments(hit.payment_options)}</div>
             <a href="${hit.reserve_url || '#'}" target="_blank" class="result-card__reserve">📅 Reserve Now</a>
           </div>
         </div>
@@ -382,8 +589,6 @@ search.on('result', function(event) {
   console.log('📢 [Event] Search result event!');
   let hits = event.results.hits || [];
   console.log(`📊 [Event] Found ${hits.length} restaurants`);
-  
-  // No hacer nada aquí, dejamos que performSearch maneje la actualización
 });
 
 // ============ INTERCEPTAR BÚSQUEDA DEL INPUT ============
@@ -395,7 +600,6 @@ if (searchInput) {
   searchInput.addEventListener('input', function() {
     const query = this.value || '';
     
-    // Solo buscar si cambió el texto
     if (query !== lastQuery) {
       lastQuery = query;
       clearTimeout(window._searchTimeout);
@@ -406,7 +610,6 @@ if (searchInput) {
     }
   });
   
-  // También detectar cuando se presiona Enter
   searchInput.addEventListener('keydown', function(e) {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -434,7 +637,6 @@ document.getElementById('clear-filters')?.addEventListener('click', function() {
   if (search && search.helper) {
     search.helper.clearRefinements().search();
   }
-  // También limpiar el input
   if (searchInput) {
     searchInput.value = '';
     performSearch('');
@@ -459,7 +661,6 @@ document.getElementById('sort-select')?.addEventListener('change', function() {
     case 'price_desc': search.helper.setQueryParameter('sort', ['price:desc']).search(); break;
     default: search.helper.setQueryParameter('sort', undefined).search();
   }
-  // Forzar actualización
   setTimeout(() => {
     const query = searchInput?.value || '';
     performSearch(query);
@@ -496,7 +697,9 @@ document.addEventListener('click', function(e) {
       
       if (targetMarker) {
         console.log('✅ Flying to marker and opening popup...');
-        map.flyTo([latNum, lngNum], 14, { duration: 1.2 });
+        // Guardar el zoom actual antes de volar
+        const currentZoom = map.getZoom();
+        map.flyTo([latNum, lngNum], Math.min(currentZoom + 2, 18), { duration: 1.0 });
         setTimeout(() => {
           targetMarker.openPopup();
         }, 400);
@@ -517,4 +720,5 @@ document.addEventListener('click', function(e) {
 
 console.log('✅ Restaurant Locator initialized!');
 console.log('💡 6 resultados por página');
+console.log('💡 Búsqueda geográfica activa: mueve el mapa para explorar');
 console.log('💡 Busca "Bistro Milano" para probar');
