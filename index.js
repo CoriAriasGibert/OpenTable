@@ -20,192 +20,23 @@ let map;
 let markers = [];
 let markerCluster = null;
 let mapInitialized = false;
-let initialLoadDone = false;
 let markersById = {};
-let currentRestaurants = [];
 let isUpdatingMarkers = false;
-let lastSearchHits = [];
 
-// ============ ESTADO DE BÚSQUEDA ============
-let isTextSearchActive = false; // Si el usuario está buscando por texto
-let lastTextQuery = '';
+// ============ SEARCH STATE ============
+let isInitialLoad = true;
+let lastQuery = '';
 
-// ============ BÚSQUEDA POR MAPA ============
-
-let mapSearchTimeout = null;
-let lastMapSearch = null;
-
-/**
- * Buscar restaurantes en el área visible del mapa
- * Solo se ejecuta si NO hay una búsqueda por texto activa
- */
-function searchRestaurantsInMapView() {
-  // NO ejecutar si hay una búsqueda por texto activa
-  if (isTextSearchActive) {
-    console.log('⏳ Búsqueda por mapa desactivada (búsqueda por texto activa)');
-    return;
-  }
-
-  if (!map) {
-    console.warn('⚠️ Mapa no inicializado');
-    return;
-  }
-
-  const bounds = map.getBounds();
-  if (!bounds.isValid()) {
-    console.warn('⚠️ Límites del mapa no válidos');
-    return;
-  }
-
-  const center = bounds.getCenter();
-  const zoom = map.getZoom();
-  const radius = calculateRadiusFromZoom(zoom);
-  
-  console.log(`🔍 Buscando restaurantes en área visible: centro [${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}], radio: ${radius}m, zoom: ${zoom}`);
-
-  const searchKey = `${center.lat.toFixed(4)},${center.lng.toFixed(4)},${radius}`;
-  if (lastMapSearch === searchKey) {
-    console.log('⏳ Misma área, omitiendo búsqueda duplicada');
-    return;
-  }
-  lastMapSearch = searchKey;
-
-  const index = searchClient.initIndex('restaurants');
-  
-  index.search('', {
-    hitsPerPage: 20,
-    aroundLatLng: `${center.lat}, ${center.lng}`,
-    aroundRadius: radius,
-    attributesToRetrieve: ['*']
-  }).then(response => {
-    console.log(`✅ Búsqueda por mapa: ${response.hits.length} restaurantes encontrados`);
-    
-    if (response.hits && response.hits.length > 0) {
-      updateMapMarkers(response.hits, false); // false = no forzar zoom
-      updateHitsUI(response.hits);
-      
-      const countEl = document.getElementById('results-count');
-      if (countEl) {
-        countEl.textContent = `📊 ${response.nbHits || response.hits.length} restaurants`;
-      }
-    } else {
-      console.log('📭 No se encontraron restaurantes en esta área');
-      showMapMessage('No restaurants found in this area');
-    }
-  }).catch(err => {
-    console.error('❌ Error en búsqueda por mapa:', err);
-  });
-}
-
-/**
- * Calcular radio de búsqueda basado en el nivel de zoom
- */
-function calculateRadiusFromZoom(zoom) {
-  const baseRadius = 50000;
-  const radius = Math.max(2000, Math.min(50000, baseRadius / (zoom * 0.5 + 0.5)));
-  return Math.round(radius);
-}
-
-/**
- * Actualizar la interfaz de resultados con los hits
- */
-function updateHitsUI(hits) {
-  const container = document.getElementById('hits');
-  if (!container) return;
-
-  if (!hits || hits.length === 0) {
-    container.innerHTML = `
-      <div class="ais-Hits-empty">
-        <p>😕 No restaurants found in this area</p>
-        <p style="font-size:13px;color:rgba(26,26,46,0.4);">Try moving the map to explore more</p>
-      </div>
-    `;
-    return;
-  }
-
-  container.innerHTML = hits.map(hit => `
-    <div class="result-card" 
-         data-id="${hit.objectID}"
-         data-lat="${hit._geoloc?.lat}" 
-         data-lng="${hit._geoloc?.lng}"
-         data-name="${hit.name}">
-      <div class="result-card__image">
-        <img src="${hit.image_url}" alt="${hit.name}" onerror="this.style.display='none'" />
-        <span class="result-card__badge">⭐ ${hit.stars_count || 'N/A'}</span>
-      </div>
-      <div class="result-card__body">
-        <h3 class="result-card__name">${hit.name || 'Restaurant'}</h3>
-        <div class="result-card__rating">
-          <span class="result-card__stars">⭐ ${hit.stars_count || 'N/A'}</span>
-          <span class="result-card__reviews">(${hit.reviews_count || 0} reviews)</span>
-        </div>
-        <div class="result-card__meta">
-          <span class="result-card__tag result-card__tag--cuisine">${hit.cuisine_type || ''}</span>
-          <span class="result-card__tag result-card__tag--price">${hit.price_range_string || ''}</span>
-        </div>
-        <p class="result-card__dining">${hit.dining_style || ''}</p>
-        <p class="result-card__address">${hit.address || ''}, ${hit.city || ''}, ${hit.state || ''}</p>
-        <a href="${hit.reserve_url || '#'}" target="_blank" class="result-card__reserve">📅 Reserve Now</a>
-      </div>
-    </div>
-  `).join('');
-}
-
-/**
- * Mostrar mensaje en el mapa
- */
-function showMapMessage(message) {
-  clearMapMessage();
-  
-  const info = L.control({ position: 'bottomleft' });
-  info.onAdd = function() {
-    this._div = L.DomUtil.create('div', 'map-message');
-    this._div.innerHTML = `
-      <div style="
-        background: rgba(255,255,255,0.85);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        padding: 10px 16px;
-        border-radius: 12px;
-        box-shadow: 0 4px 16px rgba(0,0,0,0.08);
-        font-size: 13px;
-        color: #1a1a3e;
-        border-left: 3px solid #6C5CE7;
-        font-weight: 500;
-      ">
-        ${message}
-      </div>
-    `;
-    return this._div;
-  };
-  info.addTo(map);
-  window._mapMessage = info;
-}
-
-function clearMapMessage() {
-  if (window._mapMessage && map) {
-    map.removeControl(window._mapMessage);
-    window._mapMessage = null;
-  }
-}
-
-// Exponer variables para depuración
-window.__debug = {
-  markersById,
-  markers,
-  currentRestaurants,
-  lastSearchHits,
-  updateMapMarkers,
-  search,
-  searchClient,
-  searchRestaurantsInMapView
-};
+// ============ MAP INITIALIZATION ============
 
 function initMap() {
   if (mapInitialized) return;
   
   const mapContainer = document.getElementById('map');
-  if (!mapContainer) return;
+  if (!mapContainer) {
+    console.warn('⚠️ Map container not found');
+    return;
+  }
 
   console.log('🗺️ Creating map...');
   
@@ -220,14 +51,13 @@ function initMap() {
     maxZoom: 19,
   }).addTo(map);
 
-  // Evento de movimiento del mapa
+  // Move map listener
   map.on('moveend', function() {
-    console.log('🗺️ Mapa movido o zoom cambiado');
-    
-    clearTimeout(mapSearchTimeout);
-    mapSearchTimeout = setTimeout(function() {
-      searchRestaurantsInMapView();
-    }, 300);
+    console.log('🗺️ Map moved, searching in new area...');
+    // Only search if not in text search mode
+    if (!lastQuery || lastQuery.trim() === '') {
+      searchByMapView();
+    }
   });
 
   markerCluster = L.markerClusterGroup({
@@ -247,14 +77,11 @@ function initMap() {
   map.addLayer(markerCluster);
   mapInitialized = true;
   console.log('🗺️ Map initialized ✅');
-  
-  // Búsqueda inicial al cargar el mapa
-  setTimeout(function() {
-    searchRestaurantsInMapView();
-  }, 500);
 }
 
-function updateMapMarkers(restaurants, forceZoom = false) {
+// ============ UPDATE MAP MARKERS ============
+
+function updateMapMarkers(restaurants) {
   console.log('🔄 updateMapMarkers called with', restaurants?.length || 0, 'restaurants');
   
   if (!map || !markerCluster) {
@@ -263,10 +90,7 @@ function updateMapMarkers(restaurants, forceZoom = false) {
   }
   
   isUpdatingMarkers = true;
-  currentRestaurants = restaurants || [];
-  lastSearchHits = restaurants || [];
   
-  console.log('🗑️ Clearing all markers from cluster');
   markerCluster.clearLayers();
   markers = [];
   markersById = {};
@@ -311,22 +135,6 @@ function updateMapMarkers(restaurants, forceZoom = false) {
   markers = newMarkers;
 
   console.log(`📍 ${valid.length} markers added to map ✅`);
-  console.log('📋 Marcadores disponibles:', Object.keys(markersById).slice(0, 10));
-
-  // SOLO forzar zoom si se pide explícitamente
-  if (forceZoom && valid.length > 0) {
-    try {
-      const group = L.featureGroup();
-      valid.forEach(r => group.addLayer(L.marker([r._geoloc.lat, r._geoloc.lng])));
-      const bounds = group.getBounds();
-      if (bounds.isValid()) {
-        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 12 });
-        console.log('🔍 Zoom forzado para mostrar nuevos marcadores');
-      }
-    } catch (e) {
-      console.warn('⚠️ Could not adjust zoom:', e);
-    }
-  }
   
   isUpdatingMarkers = false;
 }
@@ -334,15 +142,11 @@ function updateMapMarkers(restaurants, forceZoom = false) {
 // ============ FIND MARKER ============
 
 function findMarker(lat, lng, objectID, name) {
-  console.log(`🔍 Finding marker for: ${name || objectID} at ${lat}, ${lng}`);
-  
   if (objectID && markersById[objectID]) {
-    console.log(`✅ Found by objectID: ${objectID}`);
     return markersById[objectID];
   }
   
   if (name && markersById[name]) {
-    console.log(`✅ Found by name: ${name}`);
     return markersById[name];
   }
   
@@ -351,101 +155,248 @@ function findMarker(lat, lng, objectID, name) {
     const lngNum = parseFloat(lng);
     const coordKey = `${latNum.toFixed(6)},${lngNum.toFixed(6)}`;
     if (markersById[coordKey]) {
-      console.log(`✅ Found by coordinates: ${coordKey}`);
       return markersById[coordKey];
     }
   }
   
-  console.log('🔍 Searching linearly with tolerance...');
   const latNum = parseFloat(lat);
   const lngNum = parseFloat(lng);
   
   for (let i = 0; i < markers.length; i++) {
     const pos = markers[i].getLatLng();
-    const diffLat = Math.abs(pos.lat - latNum);
-    const diffLng = Math.abs(pos.lng - lngNum);
-    if (diffLat < 0.001 && diffLng < 0.001) {
-      console.log(`✅ Found by linear search (diff: ${diffLat.toFixed(6)}, ${diffLng.toFixed(6)})`);
+    if (Math.abs(pos.lat - latNum) < 0.001 && Math.abs(pos.lng - lngNum) < 0.001) {
       return markers[i];
     }
   }
   
-  console.log('❌ No marker found');
   return null;
 }
 
-// ============ FUNCIÓN PRINCIPAL DE BÚSQUEDA ============
+// ============ UPDATE LIST UI ============
 
-function performSearch(query) {
-  console.log(`🔍 Realizando búsqueda: "${query}"`);
-  
-  const trimmedQuery = query?.trim() || '';
-  lastTextQuery = trimmedQuery;
-  
-  // Si hay texto, activar modo búsqueda por texto
-  if (trimmedQuery !== '') {
-    isTextSearchActive = true;
-    console.log('🔍 Modo búsqueda por texto ACTIVADO');
-  } else {
-    isTextSearchActive = false;
-    console.log('🔍 Modo búsqueda por texto DESACTIVADO');
-    // Si el usuario borró el texto, volver a la búsqueda por mapa
-    setTimeout(function() {
-      searchRestaurantsInMapView();
-    }, 300);
+function updateListUI(hits) {
+  const container = document.getElementById('hits');
+  if (!container) {
+    console.warn('⚠️ #hits container not found');
     return;
   }
+
+  // FORZAR SOLO 6 RESULTADOS
+  const displayHits = hits.slice(0, 6);
+
+  if (!displayHits || displayHits.length === 0) {
+    container.innerHTML = `
+      <div class="ais-Hits-empty">
+        <p>😕 No restaurants found</p>
+        <p style="font-size:13px;color:rgba(26,26,46,0.4);">Try adjusting your search or moving the map</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = displayHits.map(hit => `
+    <div class="result-card" 
+         data-id="${hit.objectID}"
+         data-lat="${hit._geoloc?.lat}" 
+         data-lng="${hit._geoloc?.lng}"
+         data-name="${hit.name}">
+      <div class="result-card__image">
+        <img src="${hit.image_url}" alt="${hit.name}" onerror="this.style.display='none'" />
+        <span class="result-card__badge">⭐ ${hit.stars_count || 'N/A'}</span>
+      </div>
+      <div class="result-card__body">
+        <h3 class="result-card__name">${hit.name || 'Restaurant'}</h3>
+        <div class="result-card__rating">
+          <span class="result-card__stars">⭐ ${hit.stars_count || 'N/A'}</span>
+          <span class="result-card__reviews">(${hit.reviews_count || 0} reviews)</span>
+        </div>
+        <div class="result-card__meta">
+          <span class="result-card__tag result-card__tag--cuisine">${hit.cuisine_type || ''}</span>
+          <span class="result-card__tag result-card__tag--price">${hit.price_range_string || ''}</span>
+        </div>
+        <p class="result-card__dining">${hit.dining_style || ''}</p>
+        <p class="result-card__address">${hit.address || ''}, ${hit.city || ''}, ${hit.state || ''}</p>
+        <a href="${hit.reserve_url || '#'}" target="_blank" class="result-card__reserve">📅 Reserve Now</a>
+      </div>
+    </div>
+  `).join('');
+  
+  console.log(`📋 Lista actualizada con ${displayHits.length} resultados`);
+}
+
+// ============ UPDATE STATS ============
+
+function updateStats(count) {
+  const countEl = document.getElementById('results-count');
+  if (countEl) {
+    countEl.innerHTML = `📊 ${count} restaurants`;
+  }
+}
+
+// ============ PERFORM SEARCH ============
+
+function performSearch(query = '', geoParams = null) {
+  console.log(`🔍 Performing search: "${query}"`);
   
   const index = searchClient.initIndex('restaurants');
   
   const searchParams = {
     hitsPerPage: 6,
     attributesToRetrieve: ['*'],
-    query: trimmedQuery,
-    // Eliminar filtros de ubicación para buscar en todo el país
-    aroundLatLng: undefined,
-    aroundRadius: undefined
+    facets: ['cuisine_type', 'price_range_string', 'dining_style']
   };
-  
-  index.search(trimmedQuery, searchParams).then(response => {
-    console.log('✅ Búsqueda completada!');
-    console.log(`📊 Encontrados ${response.hits.length} restaurantes`);
+
+  // If query exists, use text search
+  if (query && query.trim() !== '') {
+    searchParams.query = query.trim();
+    lastQuery = query;
+  } else {
+    lastQuery = '';
     
-    if (response.hits && response.hits.length > 0) {
-      console.log('📋 Primer resultado:', response.hits[0].name);
-      // forceZoom = true para que zoom al resultado de la búsqueda
-      updateMapMarkers(response.hits, true);
-      updateHitsUI(response.hits);
-      
-      const countEl = document.getElementById('results-count');
-      if (countEl) {
-        countEl.textContent = `📊 ${response.nbHits || response.hits.length} restaurants`;
+    // If geoParams provided, use them
+    if (geoParams && geoParams.lat && geoParams.lng && geoParams.radius) {
+      searchParams.aroundLatLng = `${geoParams.lat}, ${geoParams.lng}`;
+      searchParams.aroundRadius = geoParams.radius;
+      console.log(`📍 Geo search: radius ${geoParams.radius}m`);
+    } else if (map) {
+      // Use current map view
+      const bounds = map.getBounds();
+      if (bounds && bounds.isValid()) {
+        const center = bounds.getCenter();
+        const zoom = map.getZoom();
+        const radius = calculateRadiusFromZoom(zoom);
+        searchParams.aroundLatLng = `${center.lat}, ${center.lng}`;
+        searchParams.aroundRadius = radius;
+        console.log(`📍 Using map view: radius ${radius}m`);
       }
-    } else {
-      console.log('📭 No se encontraron resultados');
-      updateMapMarkers([]);
-      updateHitsUI([]);
     }
+  }
+
+  // Apply filters from helper
+  if (search && search.helper) {
+    const refinements = search.helper.getRefinements();
+    let filterString = '';
+    
+    refinements.forEach(ref => {
+      if (ref.attribute === 'cuisine_type' && ref.type === 'disjunctive') {
+        const values = ref.values.map(v => `cuisine_type:"${v.name}"`).join(' OR ');
+        filterString += `(${values})`;
+      }
+      if (ref.attribute === 'price_range_string' && ref.type === 'disjunctive') {
+        const values = ref.values.map(v => `price_range_string:"${v.name}"`).join(' OR ');
+        if (filterString) filterString += ' AND ';
+        filterString += `(${values})`;
+      }
+      if (ref.attribute === 'dining_style' && ref.type === 'disjunctive') {
+        const values = ref.values.map(v => `dining_style:"${v.name}"`).join(' OR ');
+        if (filterString) filterString += ' AND ';
+        filterString += `(${values})`;
+      }
+    });
+    
+    if (filterString) {
+      searchParams.filters = filterString;
+      console.log('🔧 Filters applied:', filterString);
+    }
+  }
+
+  console.log('📋 Search params:', searchParams);
+
+  index.search(searchParams.query || '', searchParams).then(response => {
+    const hits = response.hits || [];
+    const total = response.nbHits || hits.length;
+    
+    console.log(`✅ Search complete: ${hits.length} results (total: ${total})`);
+    
+    // Update map with ALL hits (up to 6)
+    updateMapMarkers(hits);
+    
+    // Update list with 6 results
+    updateListUI(hits);
+    
+    // Update stats with total count
+    updateStats(total);
+    
+    // Zoom to show markers if there are results and it's a text search
+    if (query && query.trim() !== '' && hits.length > 0) {
+      zoomToMarkers(hits);
+    }
+    
   }).catch(err => {
-    console.error('❌ Error en búsqueda:', err);
+    console.error('❌ Search error:', err);
   });
 }
 
-// ============ FETCH INICIAL ============
+// ============ SEARCH BY MAP VIEW ============
 
-function fetchInitialRestaurants() {
-  console.log('🔄 Cargando restaurantes iniciales...');
+function searchByMapView() {
+  if (!map) return;
   
-  if (!map) {
-    console.log('⏳ Esperando mapa...');
-    setTimeout(fetchInitialRestaurants, 300);
-    return;
-  }
+  const bounds = map.getBounds();
+  if (!bounds || !bounds.isValid()) return;
   
-  searchRestaurantsInMapView();
+  const center = bounds.getCenter();
+  const zoom = map.getZoom();
+  const radius = calculateRadiusFromZoom(zoom);
+  
+  const geoParams = {
+    lat: center.lat,
+    lng: center.lng,
+    radius: radius
+  };
+  
+  console.log(`🔍 Searching by map view: center [${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}], radius: ${radius}m`);
+  
+  // Use empty query for map search
+  performSearch('', geoParams);
 }
 
-// ============ PAYMENT RENDERER ============
+// ============ ZOOM TO MARKERS ============
+
+function zoomToMarkers(hits) {
+  if (!map || !hits || hits.length === 0) return;
+  
+  const valid = hits.filter(r => r._geoloc && r._geoloc.lat && r._geoloc.lng);
+  if (valid.length === 0) return;
+  
+  try {
+    const group = L.featureGroup();
+    valid.forEach(r => group.addLayer(L.marker([r._geoloc.lat, r._geoloc.lng])));
+    const bounds = group.getBounds();
+    if (bounds.isValid()) {
+      map.fitBounds(bounds, { padding: [80, 80], maxZoom: 12 });
+      console.log('🔍 Zoom adjusted to show markers');
+    }
+  } catch (e) {
+    console.warn('⚠️ Could not adjust zoom:', e);
+  }
+}
+
+// ============ CALCULATE RADIUS ============
+
+function calculateRadiusFromZoom(zoom) {
+  const radiusMap = {
+    3: 500000,
+    4: 400000,
+    5: 250000,
+    6: 150000,
+    7: 80000,
+    8: 50000,
+    9: 30000,
+    10: 20000,
+    11: 15000,
+    12: 10000,
+    13: 7000,
+    14: 5000,
+    15: 3000,
+    16: 2000,
+    17: 1500,
+    18: 1000
+  };
+  return radiusMap[Math.round(zoom)] || 50000;
+}
+
+// ============ RENDER PAYMENTS ============
 
 function renderPayments(payments) {
   if (!payments || payments.length === 0) return '';
@@ -455,7 +406,11 @@ function renderPayments(payments) {
 
 // ============ INSTANTSEARCH WIDGETS ============
 
+// ELIMINADO: hits widget - usamos updateListUI manual
+// ELIMINADO: stats widget - usamos updateStats manual
+
 search.addWidgets([
+  // Search Box
   instantsearch.widgets.searchBox({
     container: '#search-input',
     placeholder: '🔍 Search restaurants, cuisines, cities...',
@@ -469,67 +424,7 @@ search.addWidgets([
     },
   }),
 
-  instantsearch.widgets.hits({
-    container: '#hits',
-    templates: {
-      item: (hit) => `
-        <div class="result-card" 
-             data-id="${hit.objectID}"
-             data-lat="${hit._geoloc?.lat}" 
-             data-lng="${hit._geoloc?.lng}"
-             data-name="${hit.name}">
-          <div class="result-card__image">
-            <img src="${hit.image_url}" alt="${hit.name}" onerror="this.style.display='none'" />
-            <span class="result-card__badge">⭐ ${hit.stars_count || 'N/A'}</span>
-          </div>
-          <div class="result-card__body">
-            <h3 class="result-card__name">${hit.name || 'Restaurant'}</h3>
-            <div class="result-card__rating">
-              <span class="result-card__stars">⭐ ${hit.stars_count || 'N/A'}</span>
-              <span class="result-card__reviews">(${hit.reviews_count || 0} reviews)</span>
-            </div>
-            <div class="result-card__meta">
-              <span class="result-card__tag result-card__tag--cuisine">${hit.cuisine_type || ''}</span>
-              <span class="result-card__tag result-card__tag--price">${hit.price_range_string || ''}</span>
-            </div>
-            <p class="result-card__dining">${hit.dining_style || ''}</p>
-            <p class="result-card__address">${hit.address || ''}, ${hit.city || ''}, ${hit.state || ''}</p>
-            <a href="${hit.reserve_url || '#'}" target="_blank" class="result-card__reserve">📅 Reserve Now</a>
-          </div>
-        </div>
-      `,
-      empty: `
-        <div class="ais-Hits-empty">
-          <p>😕 No restaurants found for "<em>{{query}}</em>"</p>
-          <a href="." class="btn-clear-filters" style="display:inline-block;width:auto;padding:8px 24px;">Clear search</a>
-        </div>
-      `,
-    },
-  }),
-
-  instantsearch.widgets.stats({
-    container: '#results-count',
-    templates: {
-      text: '📊 {{nbHits}} restaurants',
-    },
-  }),
-
-  instantsearch.widgets.stats({
-    container: '#results-time',
-    templates: {
-      text: '⚡ {{processingTimeMS}}ms',
-    },
-  }),
-
-  instantsearch.widgets.pagination({
-    container: '#show-more',
-    scrollTo: false,
-    templates: {
-      previous: '',
-      next: '',
-    },
-  }),
-
+  // Filters
   instantsearch.widgets.refinementList({
     container: '#cuisine-facets',
     attribute: 'cuisine_type',
@@ -575,57 +470,62 @@ search.addWidgets([
 // ============ START SEARCH ============
 search.start();
 
-// FORZAR hitsPerPage en el helper después de iniciar
-setTimeout(() => {
-  if (search.helper) {
-    search.helper.setQueryParameter('hitsPerPage', 6);
-    console.log('🔧 Forzado hitsPerPage = 6 en el helper');
-  }
-}, 100);
+// ============ INTERCEPT SEARCH BOX INPUT ============
 
-// ============ LISTENER DE RESULTADOS DE INSTANTSEARCH ============
-
-search.on('result', function(event) {
-  console.log('📢 [Event] Search result event!');
-  let hits = event.results.hits || [];
-  console.log(`📊 [Event] Found ${hits.length} restaurants`);
-});
-
-// ============ INTERCEPTAR BÚSQUEDA DEL INPUT ============
-
-const searchInput = document.querySelector('.ais-SearchBox-input');
-if (searchInput) {
-  let lastQuery = '';
+// We need to intercept the search box to trigger our custom search
+const searchBoxInput = document.querySelector('.ais-SearchBox-input');
+if (searchBoxInput) {
+  let lastQueryValue = '';
   
-  searchInput.addEventListener('input', function() {
+  // Override the search box behavior
+  searchBoxInput.addEventListener('input', function() {
     const query = this.value || '';
-    
-    if (query !== lastQuery) {
-      lastQuery = query;
+    if (query !== lastQueryValue) {
+      lastQueryValue = query;
       clearTimeout(window._searchTimeout);
       window._searchTimeout = setTimeout(() => {
-        console.log(`🔍 Input detectado: "${query}"`);
+        console.log(`🔍 Search input: "${query}"`);
         performSearch(query);
       }, 300);
     }
   });
   
-  searchInput.addEventListener('keydown', function(e) {
+  searchBoxInput.addEventListener('keydown', function(e) {
     if (e.key === 'Enter') {
       e.preventDefault();
       const query = this.value || '';
-      console.log(`🔍 Enter presionado: "${query}"`);
+      console.log(`🔍 Enter pressed: "${query}"`);
       performSearch(query);
     }
   });
 }
 
-// ============ INICIALIZAR ============
+// ============ INTERCEPT FILTER CHANGES ============
+
+if (search.helper) {
+  search.helper.on('change', function() {
+    console.log('🔄 Filter changed, updating results...');
+    setTimeout(() => {
+      const query = searchBoxInput?.value || '';
+      if (query && query.trim() !== '') {
+        performSearch(query);
+      } else {
+        searchByMapView();
+      }
+    }, 200);
+  });
+}
+
+// ============ INITIALIZE ============
 
 console.log('🚀 Initializing application...');
 
-setTimeout(initMap, 300);
-setTimeout(fetchInitialRestaurants, 600);
+setTimeout(initMap, 500);
+
+setTimeout(function() {
+  console.log('🔍 Running initial search by map view...');
+  searchByMapView();
+}, 800);
 
 // ============ UI EVENT LISTENERS ============
 
@@ -637,15 +537,25 @@ document.getElementById('clear-filters')?.addEventListener('click', function() {
   if (search && search.helper) {
     search.helper.clearRefinements().search();
   }
-  if (searchInput) {
-    searchInput.value = '';
-    performSearch('');
+  if (searchBoxInput) {
+    searchBoxInput.value = '';
   }
+  setTimeout(() => {
+    searchByMapView();
+  }, 200);
 });
 
 document.getElementById('show-more-btn')?.addEventListener('click', function() {
   if (search && search.helper) {
     search.helper.nextPage();
+    setTimeout(() => {
+      const query = searchBoxInput?.value || '';
+      if (query && query.trim() !== '') {
+        performSearch(query);
+      } else {
+        searchByMapView();
+      }
+    }, 300);
   }
 });
 
@@ -662,63 +572,28 @@ document.getElementById('sort-select')?.addEventListener('change', function() {
     default: search.helper.setQueryParameter('sort', undefined).search();
   }
   setTimeout(() => {
-    const query = searchInput?.value || '';
-    performSearch(query);
-  }, 200);
+    const query = searchBoxInput?.value || '';
+    if (query && query.trim() !== '') {
+      performSearch(query);
+    } else {
+      searchByMapView();
+    }
+  }, 300);
 });
 
-// ============ CLICK EN TARJETA → ZOOM AL MARCADOR ============
+// ============ CARD CLICK → ZOOM ============
 
 document.addEventListener('click', function(e) {
   const card = e.target.closest('.result-card');
   if (card && map) {
-    const lat = card.dataset.lat;
-    const lng = card.dataset.lng;
-    const objectID = card.dataset.id;
-    const name = card.dataset.name;
-    
-    console.log(`📍 Click on card: ${name || objectID} at ${lat}, ${lng}`);
-    
-    if (!lat || !lng) {
-      console.warn('⚠️ No coordinates found on card');
-      return;
-    }
-    
-    const latNum = parseFloat(lat);
-    const lngNum = parseFloat(lng);
-    
-    if (isNaN(latNum) || isNaN(lngNum)) {
-      console.warn('⚠️ Invalid coordinates');
-      return;
-    }
-    
-    const findAndFly = function() {
-      const targetMarker = findMarker(latNum, lngNum, objectID, name);
-      
-      if (targetMarker) {
-        console.log('✅ Flying to marker and opening popup...');
-        // Guardar el zoom actual antes de volar
-        const currentZoom = map.getZoom();
-        map.flyTo([latNum, lngNum], Math.min(currentZoom + 2, 18), { duration: 1.0 });
-        setTimeout(() => {
-          targetMarker.openPopup();
-        }, 400);
-      } else {
-        console.warn('⚠️ No marker found, flying to location anyway...');
-        map.flyTo([latNum, lngNum], 14, { duration: 1.2 });
-      }
-    };
-    
-    if (isUpdatingMarkers) {
-      console.log('⏳ Markers are updating, waiting 300ms...');
-      setTimeout(findAndFly, 300);
-    } else {
-      findAndFly();
+    const lat = parseFloat(card.dataset.lat);
+    const lng = parseFloat(card.dataset.lng);
+    if (!isNaN(lat) && !isNaN(lng)) {
+      map.flyTo([lat, lng], 14, { duration: 1.2 });
     }
   }
 });
 
 console.log('✅ Restaurant Locator initialized!');
 console.log('💡 6 resultados por página');
-console.log('💡 Búsqueda geográfica activa: mueve el mapa para explorar');
-console.log('💡 Busca "Bistro Milano" para probar');
+console.log('💡 Map search and text search integrated');
