@@ -24,8 +24,8 @@ let markersById = {};
 let isUpdatingMarkers = false;
 
 // ============ SEARCH STATE ============
-let isInitialLoad = true;
 let lastQuery = '';
+let isInitialLoad = true;
 
 // ============ MAP INITIALIZATION ============
 
@@ -51,10 +51,10 @@ function initMap() {
     maxZoom: 19,
   }).addTo(map);
 
-  // Move map listener
+  // ✅ IMPORTANTE: Cuando el mapa se mueve, actualiza resultados
   map.on('moveend', function() {
     console.log('🗺️ Map moved, searching in new area...');
-    // Only search if not in text search mode
+    // Solo buscar por mapa si NO hay búsqueda por texto activa
     if (!lastQuery || lastQuery.trim() === '') {
       searchByMapView();
     }
@@ -181,7 +181,7 @@ function updateListUI(hits) {
     return;
   }
 
-  // FORZAR SOLO 6 RESULTADOS
+  // ✅ FORZAR SOLO 6 RESULTADOS
   const displayHits = hits.slice(0, 6);
 
   if (!displayHits || displayHits.length === 0) {
@@ -233,7 +233,7 @@ function updateStats(count) {
   }
 }
 
-// ============ PERFORM SEARCH ============
+// ============ PERFORM SEARCH - CORAZÓN DE LA APP ============
 
 function performSearch(query = '', geoParams = null) {
   console.log(`🔍 Performing search: "${query}"`);
@@ -246,20 +246,18 @@ function performSearch(query = '', geoParams = null) {
     facets: ['cuisine_type', 'price_range_string', 'dining_style']
   };
 
-  // If query exists, use text search
+  // 1. Aplicar búsqueda por texto o geo
   if (query && query.trim() !== '') {
     searchParams.query = query.trim();
     lastQuery = query;
   } else {
     lastQuery = '';
     
-    // If geoParams provided, use them
     if (geoParams && geoParams.lat && geoParams.lng && geoParams.radius) {
       searchParams.aroundLatLng = `${geoParams.lat}, ${geoParams.lng}`;
       searchParams.aroundRadius = geoParams.radius;
       console.log(`📍 Geo search: radius ${geoParams.radius}m`);
     } else if (map) {
-      // Use current map view
       const bounds = map.getBounds();
       if (bounds && bounds.isValid()) {
         const center = bounds.getCenter();
@@ -272,52 +270,53 @@ function performSearch(query = '', geoParams = null) {
     }
   }
 
-  // Apply filters from helper
+  // 2. Aplicar filtros (AND estricto)
   if (search && search.helper) {
     const refinements = search.helper.getRefinements();
     let filterString = '';
     
     refinements.forEach(ref => {
       if (ref.attribute === 'cuisine_type' && ref.type === 'disjunctive') {
-        const values = ref.values.map(v => `cuisine_type:"${v.name}"`).join(' OR ');
-        filterString += `(${values})`;
+        const values = ref.values.map(v => `cuisine_type:"${v.name}"`).join(' AND ');
+        if (values) filterString += `(${values})`;
       }
       if (ref.attribute === 'price_range_string' && ref.type === 'disjunctive') {
-        const values = ref.values.map(v => `price_range_string:"${v.name}"`).join(' OR ');
-        if (filterString) filterString += ' AND ';
-        filterString += `(${values})`;
+        const values = ref.values.map(v => `price_range_string:"${v.name}"`).join(' AND ');
+        if (values) {
+          if (filterString) filterString += ' AND ';
+          filterString += `(${values})`;
+        }
       }
       if (ref.attribute === 'dining_style' && ref.type === 'disjunctive') {
-        const values = ref.values.map(v => `dining_style:"${v.name}"`).join(' OR ');
-        if (filterString) filterString += ' AND ';
-        filterString += `(${values})`;
+        const values = ref.values.map(v => `dining_style:"${v.name}"`).join(' AND ');
+        if (values) {
+          if (filterString) filterString += ' AND ';
+          filterString += `(${values})`;
+        }
       }
     });
     
     if (filterString) {
       searchParams.filters = filterString;
-      console.log('🔧 Filters applied:', filterString);
+      console.log('🔧 Strict AND filters applied:', filterString);
     }
   }
 
-  console.log('📋 Search params:', searchParams);
+  console.log('📋 Final search params:', searchParams);
 
+  // 3. Ejecutar búsqueda
   index.search(searchParams.query || '', searchParams).then(response => {
     const hits = response.hits || [];
     const total = response.nbHits || hits.length;
     
     console.log(`✅ Search complete: ${hits.length} results (total: ${total})`);
     
-    // Update map with ALL hits (up to 6)
+    // 4. Actualizar mapa y lista con los MISMOS datos
     updateMapMarkers(hits);
-    
-    // Update list with 6 results
     updateListUI(hits);
-    
-    // Update stats with total count
     updateStats(total);
     
-    // Zoom to show markers if there are results and it's a text search
+    // 5. Si es búsqueda por texto, ajustar zoom
     if (query && query.trim() !== '' && hits.length > 0) {
       zoomToMarkers(hits);
     }
@@ -347,7 +346,7 @@ function searchByMapView() {
   
   console.log(`🔍 Searching by map view: center [${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}], radius: ${radius}m`);
   
-  // Use empty query for map search
+  // ✅ Siempre que se mueve el mapa, se actualizan los resultados
   performSearch('', geoParams);
 }
 
@@ -406,8 +405,7 @@ function renderPayments(payments) {
 
 // ============ INSTANTSEARCH WIDGETS ============
 
-// ELIMINADO: hits widget - usamos updateListUI manual
-// ELIMINADO: stats widget - usamos updateStats manual
+// ✅ ELIMINADOS: widgets 'hits' y 'stats' - usamos funciones manuales
 
 search.addWidgets([
   // Search Box
@@ -424,7 +422,7 @@ search.addWidgets([
     },
   }),
 
-  // Filters
+  // Filters - SOLO LOS FILTROS
   instantsearch.widgets.refinementList({
     container: '#cuisine-facets',
     attribute: 'cuisine_type',
@@ -472,12 +470,10 @@ search.start();
 
 // ============ INTERCEPT SEARCH BOX INPUT ============
 
-// We need to intercept the search box to trigger our custom search
 const searchBoxInput = document.querySelector('.ais-SearchBox-input');
 if (searchBoxInput) {
   let lastQueryValue = '';
   
-  // Override the search box behavior
   searchBoxInput.addEventListener('input', function() {
     const query = this.value || '';
     if (query !== lastQueryValue) {
@@ -539,6 +535,7 @@ document.getElementById('clear-filters')?.addEventListener('click', function() {
   }
   if (searchBoxInput) {
     searchBoxInput.value = '';
+    lastQuery = '';
   }
   setTimeout(() => {
     searchByMapView();
@@ -595,5 +592,6 @@ document.addEventListener('click', function(e) {
 });
 
 console.log('✅ Restaurant Locator initialized!');
-console.log('💡 6 resultados por página');
-console.log('💡 Map search and text search integrated');
+console.log('💡 6 resultados por página (sincronizados con el mapa)');
+console.log('💡 Filtros con AND estricto (excluyentes)');
+console.log('💡 Mover el mapa actualiza los resultados automáticamente');
