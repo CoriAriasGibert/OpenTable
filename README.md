@@ -12,8 +12,6 @@ A modern, map‑based restaurant discovery tool powered by **Algolia** search an
 - **🔍 Text Search** – Search by name, cuisine, or city with Algolia’s InstantSearch.
 - **🎯 Strict AND Filters** – Combine cuisine, price, and dining style filters with precise `AND` logic for exact matches.
 - **📱 Mobile‑First Design** – Glass‑morphism UI with a smooth blue‑to‑violet gradient, inspired by Alan’s clean aesthetic.
-- **🗺️ Marker Clustering** – Handles hundreds of markers smoothly using Leaflet.markercluster.
-- **⚡ 6 Results Per Page** – Keeps the list scannable and the map uncluttered.
 - **🔄 Map‑List Synchronization** – Click a card to fly to its marker; move the map to refresh results.
 
 ---
@@ -62,7 +60,7 @@ OpenTable/
 ├── index.html              # Main HTML page
 ├── index.css               # Modern glass‑morphism styles
 ├── index.js                # Core application logic (InstantSearch + Leaflet)
-├── process_data.py         # Data merging & enrichment (CSV → JSON)
+├── process_data.py         # Data merging & enrichment (CSV + JSON → JSON)
 ├── update_images.py        # Image scraping from OpenTable
 ├── extract_images.py       # Image validation & fallback assignment
 ├── dataset/                # Raw data sources (CSV, JSON)
@@ -76,7 +74,6 @@ OpenTable/
 
 ### Data Pipeline (Python)
 - Merged CSV and JSON sources into a single structured index.
-- Enriched each record with `_geoloc` coordinates for geo‑search.
 - Scraped real restaurant images; applied a fallback placeholder where missing.
 
 ### Frontend (JavaScript)
@@ -90,25 +87,11 @@ OpenTable/
 - Glass‑morphism effects for depth without clutter.
 - Responsive layout that works seamlessly on any device.
 
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Feel free to open issues or submit pull requests.
-
----
-
-## 📄 License
-
-This project is open‑source and available under the [MIT License](LICENSE).
 
 ---
 
 ## 🙏 Acknowledgements
 
 - Built with ❤️ using [Algolia](https://www.algolia.com) and [Leaflet](https://leafletjs.com).
-- Design inspiration from [Alan](https://alan.app).
-
----
 
 **Happy discovering!** 🍽️🗺️
